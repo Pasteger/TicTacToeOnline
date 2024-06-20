@@ -44,7 +44,6 @@ public class GameApp {
             } catch (Exception exception) {
                 exception.printStackTrace();
             }
-
         }
     }
 
@@ -91,43 +90,40 @@ public class GameApp {
     }
 
     private static void handlingMessage(String response) {
-        String[] responseItems = response.split(":");
+        try {
+            String[] responseItems = response.split(":");
+            CommandTypes command = CommandTypes.valueOf(responseItems[0].toUpperCase());
 
-        switch (responseItems[0]) {
-            case "message":
-                System.out.println(responseItems[1]);
-                break;
-
-            case "all players connected":
-                System.out.println("All players connected");
-                String message = inputLoop("start", 5,
-                        "Enter 'start' if you ready:");
-                network.sendMessage(message);
-                break;
-
-            case "start":
-                startGame(responseItems);
-                break;
-
-            case "action":
-                playerAction(responseItems);
-                break;
-
-            case "win":
-                String winMessage = responseItems[1].equals("draw") ?
-                        "Draw!" : responseItems[1] + " is win!";
-
-                System.out.println(winMessage);
-
-                inputLoop("again", 5,
-                        "Enter 'again' if you want to play again\n" +
-                                "or 'exit' to exit the game");
-                network.sendMessage("restart");
-                break;
-            case "exit":
-                System.out.println("Game is close");
-                System.exit(0);
+            switch (command) {
+                case MESSAGE:
+                    System.out.println(responseItems[1]);
+                    break;
+                case ALL_PLAYERS_CONNECTED:
+                    notifyPlayersAboutStart();
+                    break;
+                case START:
+                    startGame(responseItems);
+                    break;
+                case ACTION:
+                    playerAction(responseItems);
+                    break;
+                case WIN:
+                    handlingWin(responseItems);
+                    break;
+                case EXIT:
+                    System.out.println("Game is close");
+                    System.exit(0);
+            }
+        } catch (IllegalArgumentException exception) {
+            System.out.println(exception.getMessage());
         }
+    }
+
+    private static void notifyPlayersAboutStart(){
+        System.out.println("All players connected");
+        String message = inputLoop("start", 5,
+                "Enter 'start' if you ready:");
+        network.sendMessage(message);
     }
 
     private static void handlingPlayerTurn(){
@@ -177,55 +173,6 @@ public class GameApp {
         }
     }
 
-    private static String checkConditionsOfEnding() {
-        for (int i = 0; i < gameField.length; i++) {
-            for (int j = 0; j < gameField[i].length; j++) {
-                String symbol = gameField[i][j];
-
-                if (symbol.equals(" ")) continue;
-
-                try {
-                    if (gameField[i][j + 1].equals(symbol) && gameField[i][j - 1].equals(symbol)) {
-                        return symbol;
-                    }
-                } catch (Exception ignored) {
-                }
-                try {
-                    if (gameField[i + 1][j].equals(symbol) && gameField[i - 1][j].equals(symbol)) {
-                        return symbol;
-                    }
-                } catch (Exception ignored) {
-                }
-                try {
-                    if (gameField[i + 1][j + 1].equals(symbol) && gameField[i - 1][j - 1].equals(symbol)) {
-                        return symbol;
-                    }
-                } catch (Exception ignored) {
-                }
-                try {
-                    if (gameField[i + 1][j - 1].equals(symbol) && gameField[i - 1][j + 1].equals(symbol)) {
-                        return symbol;
-                    }
-                } catch (Exception ignored) {
-                }
-            }
-        }
-
-        int countEmpty = 0;
-        for (String[] line : gameField) {
-            for (String symbol : line) {
-                if (symbol.equals(" ")) {
-                    countEmpty++;
-                }
-            }
-        }
-        if (countEmpty == 0) {
-            return "N";
-        }
-
-        return " ";
-    }
-
     private static void handleConditionOfEnding(){
         if (!conditionOfEnding.equals(" ")) {
             System.out.println("Game come to end");
@@ -242,6 +189,18 @@ public class GameApp {
         }
     }
 
+    private static void handlingWin(String[] responseItems){
+        String winMessage = responseItems[1].equals("draw") ?
+                "Draw!" : responseItems[1] + " is win!";
+
+        System.out.println(winMessage);
+
+        inputLoop("again", 5,
+                "Enter 'again' if you want to play again\n" +
+                        "or 'exit' to exit the game");
+        network.sendMessage("restart");
+    }
+
     private static String inputLoop(String patternString, int length, String message) {
         Pattern pattern = Pattern.compile(patternString);
 
@@ -250,14 +209,13 @@ public class GameApp {
 
             String input = scanner.next();
 
-            Matcher matcher = pattern.matcher(input);
-
             if (input.equals("exit")) {
                 System.out.println("Game is close");
                 network.disconnect();
                 System.exit(0);
             }
 
+            Matcher matcher = pattern.matcher(input);
             if (input.length() == length && matcher.find()) {
                 return input;
             } else {
@@ -275,5 +233,47 @@ public class GameApp {
                         " ----------------\n" +
                         "  " + gameField[2][0] + "  |  " + gameField[2][1] + "  |  " + gameField[2][2] + "  \n" +
                         " ----------------\n");
+    }
+
+    private static String checkConditionsOfEnding() {
+        for (int i = 0; i < gameField.length; i++) {
+            for (int j = 0; j < gameField[i].length; j++) {
+                String symbol = gameField[i][j];
+                if (symbol.equals(" ")) continue;
+
+                if (checkDirection(symbol, i, j, 0, 1) ||
+                        checkDirection(symbol, i, j, 1, 0) ||
+                        checkDirection(symbol, i, j, 1, 1) ||
+                        checkDirection(symbol, i, j, 1, -1)) {
+                    return symbol;
+                }
+            }
+        }
+
+        if (isBoardFull()) {
+            return "N";
+        }
+
+        return " ";
+    }
+
+    private static boolean checkDirection(String symbol, int row, int col, int rowChange, int colChange) {
+        try {
+            return gameField[row + rowChange][col + colChange].equals(symbol) &&
+                    gameField[row - rowChange][col - colChange].equals(symbol);
+        } catch (ArrayIndexOutOfBoundsException ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isBoardFull() {
+        for (String[] line : gameField) {
+            for (String symbol : line) {
+                if (symbol.equals(" ")) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 }

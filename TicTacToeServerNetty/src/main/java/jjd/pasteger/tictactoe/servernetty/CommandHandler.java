@@ -53,16 +53,29 @@ public class CommandHandler extends SimpleChannelInboundHandler<String> {
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, String message) {
         System.out.println(channelHandlerContext.channel().id() + ": " + message);
 
-        if (message.startsWith("setname")) {
-            setName(channelHandlerContext.channel().id(), message);
-        } else if (message.startsWith("action")) {
-            playerAction(message);
-        } else if (message.startsWith("start")) {
-            checkReadiness(channelHandlerContext.channel());
-        } else if (message.startsWith("win")) {
-            handleEndGame(message);
-        } else if (message.startsWith("restart")) {
-            restartGame(channelHandlerContext.channel().id());
+        try {
+            String[] messageItems = message.split(":");
+            CommandTypes command = CommandTypes.valueOf(messageItems[0].toUpperCase());
+
+            switch (command) {
+                case SETNAME:
+                    setName(channelHandlerContext.channel().id(), messageItems);
+                    break;
+                case ACTION:
+                    playerAction(messageItems);
+                    break;
+                case START:
+                    checkReadiness(channelHandlerContext.channel().id());
+                    break;
+                case WIN:
+                    handleEndGame(messageItems);
+                    break;
+                case RESTART:
+                    restartGame(channelHandlerContext.channel().id());
+                    break;
+            }
+        } catch (IllegalArgumentException exception) {
+            System.out.println(exception.getMessage());
         }
     }
 
@@ -70,7 +83,7 @@ public class CommandHandler extends SimpleChannelInboundHandler<String> {
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         System.out.println(cause.getMessage());
 
-        String clientName =  clients.stream()
+        String clientName = clients.stream()
                 .filter(client -> client.getId() == ctx.channel().id())
                 .findFirst()
                 .map(Client::getName).get();
@@ -89,8 +102,8 @@ public class CommandHandler extends SimpleChannelInboundHandler<String> {
         }
     }
 
-    private void setName(ChannelId id, String message) {
-        String name = message.split(":", 2)[1];
+    private void setName(ChannelId id, String[] messageItems) {
+        String name = messageItems[1];
 
         clients.stream()
                 .filter(client -> client.getId() == id)
@@ -103,10 +116,8 @@ public class CommandHandler extends SimpleChannelInboundHandler<String> {
         checkPlayerCount();
     }
 
-    private void playerAction(String message) {
+    private void playerAction(String[] messageItems) {
         if (clients.size() < 2) return;
-
-        String[] messageItems = message.split(":");
 
         String nextClient = messageItems[1];
 
@@ -121,9 +132,7 @@ public class CommandHandler extends SimpleChannelInboundHandler<String> {
         sendingToAllChannels(response);
     }
 
-    private void checkReadiness(Channel channel) {
-        ChannelId id = channel.id();
-
+    private void checkReadiness(ChannelId id) {
         clients.stream()
                 .filter(client -> client.getId() == id)
                 .findFirst()
@@ -144,12 +153,12 @@ public class CommandHandler extends SimpleChannelInboundHandler<String> {
         }
 
         if (clients.size() == 2) {
-            sendingToAllChannels("all players connected");
+            sendingToAllChannels("ALL_PLAYERS_CONNECTED");
         }
     }
 
-    private void handleEndGame(String message){
-        String name = message.split(":")[1];
+    private void handleEndGame(String[] messageItems) {
+        String name = messageItems[1];
 
         if (name.equals("draw")) {
             sendingToAllChannels("win:draw");
@@ -171,7 +180,7 @@ public class CommandHandler extends SimpleChannelInboundHandler<String> {
         }
     }
 
-    private void restartGame(ChannelId id){
+    private void restartGame(ChannelId id) {
         clients.stream().filter(client -> client.getId() == id)
                 .findFirst()
                 .ifPresent(client -> client.setRestartConsent(true));
@@ -187,8 +196,8 @@ public class CommandHandler extends SimpleChannelInboundHandler<String> {
         checkPlayerCount();
     }
 
-    private void clearClientMemory(){
-        for (Client client :clients){
+    private void clearClientMemory() {
+        for (Client client : clients) {
             client.setReady(false);
             client.setRestartConsent(false);
         }
